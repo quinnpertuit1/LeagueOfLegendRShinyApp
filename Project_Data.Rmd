@@ -1,0 +1,179 @@
+---
+title: "Group Project Data Managing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+[How to get API Key!?!?!?!?!?!](https://developer.riotgames.com/)
+1. Click the link above
+2. Sign in (or Sign up). If you have played League of Legends, the ID and password for League of Legends is the one you need here.
+3. On the left below, there's an API key.
+
+```{r}
+APIkey = "RGAPI-5f9ec25e-6ac2-4d82-9e56-3a5612c9b512" 
+# Everyone will have different API key
+
+```
+
+Prompt user to input game ID (A name that appears in the game) to get the unique serial number representing that ID.
+```{r get_id}
+# install.packages("jsonlite") : install "jsonlite" package to use API
+library(jsonlite) # load jsonlite library
+
+
+get_id = function() {
+  name = readline("Type in your Game ID : ") # Prompt user to input game id
+  
+  Summonerurl <- paste("https://na.api.pvp.net/api/lol/na/v1.4/summoner/by-name/",name,"/?api_key=",APIkey, sep = "")
+  # Get the url of requested api data
+  
+  SummonerID <- fromJSON(Summonerurl) # Get the api data into "SummonerID" variable
+  
+  id = SummonerID[[1]]$id
+   # From Riot's API and a given game id, get the unique serial numbers for that id and assign this numeric values into "id" variable
+  return(id)
+}
+```
+
+Get information about champion.
+
+We need to know each champion's unique id. 
+
+First, we are going to make a dataset containing all champion's id and add another column that has champion's name corresponding to their unique id.
+```{r champ_info}
+champ_info = function() {
+  championurl <- paste("https://na1.api.riotgames.com/lol/static-data/v3/champions?locale=en_US&dataById=false&api_key=",APIkey, sep="")
+  champions <- fromJSON(championurl)
+  # Get all champions data including id and name from Riot's API
+    
+  x = matrix(,length(champions[[1]]),2)
+  # Create a empty matrix with 2 columns and 137 rows so that it can contain id and name of 137 champions in each row
+  
+  for(i in 1:137) {
+    x[i,] = c(champions[[1]][[i]]$id, champions[[1]][[i]]$name) 
+    # In each row, add champion id on first column and name no second column
+  }
+  return(x)
+  # If this function is called, it will return the matrix containing id and names of all champions
+}
+```
+
+By using the result dataset (matrix) from above, we will ask user to input which champion they pick and will make a function to return the id of that chosen champion
+```{r get_champ_id}
+get_champ_id = function() { # A function to get champion unique id number if user input champion's name (case insensitive)
+
+
+  championurl <- paste("https://na1.api.riotgames.com/lol/static-data/v3/champions?locale=en_US&dataById=false&api_key=",APIkey, sep="")
+  champions <- fromJSON(championurl)
+  # Get all champions data including id and name from Riot's API
+  
+  champ_name = readline("What champion did you pick? : ")
+  # Prompt user to input champion name they picked
+  
+  champ_table = champ_info()
+  # Load champion data by calling champ_info function.
+  # Champion data table will contain ID in first column and Name in second column
+  
+  for(i in 1:137) { # For loop to check all champion data table
+    
+    if(toupper(champ_name) == toupper(champ_table[i,2])) { 
+      # If chosen champion name equals to the value in champion data table's second column of a specific row,
+      return(champ_table[i,1]) # Then, return the value in first column in the same row
+    }
+  }
+}
+```
+
+If user input game ID, and champion picked.
+This will provide the statistics of the player's performances with that chosen champion.
+```{r get_personal_champ_stat}
+get_personal_champ_stat = function() {
+  
+  summonerid = get_id() # Get user to input their game id and store the function return value (summonerID) in "summonerid"" variable
+  champ_id = as.numeric(get_champ_id()) # Get user to input their chosen champion's name and store the function return value (championID) in "champ_id"" variable as numeric value
+  
+  staturl <- paste("https://na.api.riotgames.com/api/lol/NA/v1.3/stats/by-summoner/",summonerid,"/ranked?season=SEASON2017&api_key=", APIkey, sep = "")
+  stat <- fromJSON(staturl)
+  # With the given summonerid, get the player's game statistics 
+  # This dataset will include various data for each champion they have played in the chosen season (2017)
+  
+  
+  personal_champ_stat_data = matrix(,1,length(stat[[3]][[2]]))
+  # Create a empty 1 row matrix that will contain all data with the chosen champion
+  
+  if(!(champ_id %in% stat[[3]][[1]])) { # If chosen champion is not in the dataset,
+    cat("You haven't played this champion.") # Then, it means, the user haven't played that champion before
+  }
+  
+  
+  for(i in 1:length(stat[[3]][[1]])) { 
+    
+    if(champ_id == stat[[3]][[1]][i]) {
+      personal_champ_stat_data = stat[[3]][i,] 
+    }
+  
+  }
+  
+  return(personal_champ_stat_data)
+    
+}
+
+
+```
+
+From the statistic data of a chosen champion, we can get the total game played and won with that specific champion. Then, we can get the personal win rate of tha champion.
+```{r get_personal_champ_win_rate}
+get_personal_champ_win_rate = function() {
+  stat <- get_personal_champ_stat()
+  total_played = stat[[2]]$totalSessionsPlayed
+  total_win = stat[[2]]$totalSessionsWon
+  
+  win_rate = total_win / total_played * 100
+  
+  return(win_rate)
+}
+```
+
+
+
+
+
+
+
+We also need overall average win rate in each tier for all champions.
+Let's use web scrapping this time
+```{r web_bronze_stat}
+# install.packages("rvest")
+library(rvest)
+
+get_web_stat_bronze = function() {
+  
+  stat_bronze = read_html("http://www.leagueofgraphs.com/champions/stats/bronze")
+  
+  stat_bronze %>%
+    html_nodes(xpath = '//*[@id="mainContent"]/div/div/div/table') %>%
+    html_table(fill = TRUE) -> champ_stat_bronze
+  
+  champ_stat_bronze[[1]]$Name %>% 
+    grep("          \r\n", x = ., value = T) %>%
+    gsub("\r\n.*", "", x = .) %>%
+    sub(" .*", "", x = .) -> web_champ_name_bronze
+  
+  
+  champ_stat_bronze[[1]]$WinRate %>%
+    grep("          \r\n", x = ., value = T) %>%
+    gsub("\r\n.*", "", x = .) -> web_champ_win_rate_bronze
+  
+  web_bronze_stat = matrix(c((web_champ_name_bronze), (web_champ_win_rate_bronze)), ncol = 2)
+  return(web_bronze_stat)
+
+}
+```
+
+
+
+
