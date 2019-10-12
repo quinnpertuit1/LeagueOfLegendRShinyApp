@@ -8,3 +8,4 @@ UIUC Stat 385 Project, Summer 2017: Predicting the Results of a League of Legend
 
 ![Clicking submit button generate outputs](https://github.com/terryhahm/LeagueOfLegendRShinyApp/blob/master/Shiny_output3.png)
 
+
